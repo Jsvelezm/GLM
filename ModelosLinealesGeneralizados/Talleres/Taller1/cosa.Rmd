@@ -1,0 +1,233 @@
+---
+title: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r algunos ajustes para las gráficas, echo=FALSE}
+
+library(readxl)
+library(ggplot2)
+tema =  theme(legend.title = element_text(colour = rgb(0.7,0.4,1),face = "bold"))
+temat = tema  
+
+  
+```
+
+
+
+# punto 6
+
+
+```{r base, echo=FALSE}
+
+peliculas <- as.data.frame(read_excel("Punto6.xlsx"))
+
+
+```
+
+En la siguiente gráfica la varible dependiente es la duracion (eje y), explicada a traves de la densidad (eje x) y la temperatura (el color). De la grafica que puede observar que a mayor densidad se obtiene menor duración, que  a menor temperatura mayor duración, y además una combinación de baja temperatura y baja densidad produce los mejores resultados.
+
+A simple vista no parecen haber puntos influyentes.
+
+```{r literalA, echo=FALSE}
+
+gg = ggplot(peliculas,aes(x=densidad, y = duracion , color = as.factor(temperatura)))+geom_point()
+
+gg + tema + geom_text(aes(label = rownames(peliculas))) + labs(color = "Temperatura")
+
+```
+
+
+Para evaluar si la interaccion es significativa se revisa CM(densidad*temperatura)/CM(error), esto se puede revisar mediante el procedimiento lm de R. a un nivel de significancia alpha del 5% la interaccion es significativa.
+
+```{r literalB, echo=FALSE}
+attach(peliculas)
+
+lm1 = lm(duracion ~ 1 + densidad + temperatura + densidad*temperatura)
+
+summary(aov(lm1))
+
+```
+
+A continuacion se presenta una grafica de los residuales versus los valores ajustados que deben ser independientes ya que el modelo tiene intercepto
+
+
+# residuales vs estimados
+
+De las siguientes gráficas se hace el siguiente análisis descriptivo:
+  
+Parece que las varianzas no son constantes en los niveles de la temperatura
+
+Parece que hay una subestimacion para el nivel de temperatura 82
+
+```{r literalC}
+
+####################################################################
+# residuales vs estimados
+
+r = lm1$residuals
+mu_est = lm1$fitted.values
+
+
+resvsest =data.frame(r,mu_est)
+
+gg2 = ggplot(resvsest,aes(x = r,y = mu_est,color = as.factor(temperatura)))+geom_point()
+
+gg2 = gg2 +tema + labs(color = "Temperatura")
+
+gg2
+####################################################################
+# residuales vs obs
+
+r = lm1$residuals
+
+resvsest =data.frame(r,mu_est)
+
+gg2 = ggplot(resvsest,aes(x = r,y = duracion ,color = as.factor(temperatura)))+geom_point()
+
+gg2 = gg2 +tema + labs(color = "Temperatura")
+gg2 +geom_text(aes(label = rownames(resvsest)))
+
+
+####################################################################
+# residuales vs densidad
+
+gg2 = ggplot(resvsest,aes(x = densidad ,y = r,color = as.factor(temperatura)))+geom_point()
+
+gg2 = gg2 +tema + labs(color = "Temperatura")
+
+gg2
+####################################################################
+# residuales vs temperatura
+
+gg2 = ggplot(resvsest,aes(x = temperatura ,y = r,color = as.factor(temperatura)))+geom_point()
+
+gg2 = gg2 +tema + labs(color = "Temperatura")
+
+gg2
+
+#####################################################################
+# obs versus ajustados
+gg2 = ggplot(resvsest,aes(x = duracion,y = mu_est,color = as.factor(temperatura)))+geom_point()
+
+gg2 = gg2 +tema + labs(color = "Temperatura")
+
+
+####################################################################
+
+
+```
+
+
+# Analisis de influencia
+
+Numero 1 y 15 parecen tener un leverage alto con respecto a los demas 
+
+
+Buscamos las distancias con valores de hkk que sean mayores de 2 veces hkk barra linea negra y 3 veces hkk barra linea roja  
+
+```{r literalD}
+
+####################################################################
+# analisis de infuencia
+X = as.matrix(cbind(1,lm1$model[,c(2,3)],lm1$model[,2]*lm1$model[,3]))
+hat = X%*%solve(t(X)%*%X)%*%t(X)
+hkk = diag(hat)
+
+barplot(hkk,ylim=c(0,0.65))
+barp = sum(hkk)/nrow(peliculas) # esto es igual
+abline(h = 2*barp)
+abline(h = 3*barp,col = 2)
+```
+
+
+
+# prueba de normalidad
+
+Parece que los residuales si son producto de un modelo con errores normales
+
+```{r qqnorm}
+
+########################################################
+library(extRemes)
+qqnorm(r)
+#############
+# este metodo es via kolmogorov 
+# Doksum and Sievers, 1976
+
+```
+
+# Prueba de varianza constante
+
+Esto confirma estadísticamente que a un nivel de significancia alpha hay violacion del supuesto de variaza constante
+
+```{r}
+lr = log(r^2)
+
+lmvar = lm(lr~X)
+
+summary(lmvar)
+
+```
+
+
+# dfbetas
+distacias de los modelos con todas las observaciones a el modelo sin la observacion k esima
+```{r dfbetas}
+#######################################################
+#dfbetas
+
+df = solve(t(X)%*%X)%*%t(X)*r/(1-hkk)
+
+df
+
+```
+
+# Distacia de cook
+
+
+la distancia de cook nos dice que tanto cambia el modelo quitando la i-esima observacion 
+
+se onservan los puntos 2 y 7
+
+```{r distanciaDeCook}
+#######################################################
+# distacia de cook
+sigmag = sum((lm1$residuals)^2)/(dim(X)[1]-dim(X)[2])
+cook = diag(t(df)%*%t(X)%*%X%*%df/sigmag)
+
+barplot(cook,col=temperatura)
+
+```
+
+
+
+# Interpretaciones de los coeficientes
+
+```{r}
+lm1$coefficients
+```
+-834.7766 significa que por cada unidad que se aumenta en la densidad esperamos que la duracion disminuya en -834.7766 cuando la temperatura permanece igual
+
+-34.08 significa que por cada unidad que se aumenta en la temperatura esperamos que la duracion disminuya en -34.08 cuando la densidad permanece igual
+
+8.5672 Significa que cuando la densidad y la teperatura disminuyen se espera un incremento adicional de 8.5672 en la duracion
+
+
+# Prediccion de una observacion con valores densidad = 2 y temperatura = 82
+
+
+
+```{r prediccion }
+c(1,2,82,164)%*%solve(t(X)%*%X)%*%t(X)%*%duracion
+ndata = data.frame(densidad = c(2),temperatura = c(82))
+predict.lm(object = lm1,newdata = ndata)
+
+```
+
+
